@@ -13,6 +13,7 @@ type IpConfig struct {
 type Config struct {
 	Server IpConfig `json:"server"`
 	Login  IpConfig `json:"login"`
+	Log    bool     `json:"log"`
 }
 
 func (Config) Read(filename string) (config Config) {
