@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"yulgang/model"
@@ -10,10 +11,31 @@ import (
 
 const BUFFERSIZE = 2048
 
-func WriteData(writer io.Writer, reader io.Reader) (n int, err error) {
-	data := make([]byte, BUFFERSIZE)
+func WriteLogFile(data []byte, prefix string) error {
+	f, err := ioutil.TempFile("log", prefix)
+	f.Write(data)
+	f.Close()
+	return err
+}
+
+func InjectData(n int, data []byte) (int, []byte) {
+	if n <= 0 {
+		return n, data
+	}
+
+	switch {
+	case (data[0] == 0x64 && data[1] == 0x80):
+		game = true
+		b := []byte{}
+		return len(b), b
+	}
+	return n, data[:n]
+}
+
+func WriteData(writer io.Writer, reader io.Reader) (data []byte, n int, err error) {
+	data = make([]byte, BUFFERSIZE)
 	n, err = reader.Read(data)
-	data = data[:n]
+	n, data = InjectData(n, data)
 	writer.Write(data)
 	return
 }
@@ -30,14 +52,17 @@ func handler(config model.Config, c *net.TCPConn) {
 	}
 	defer loginClient.Close()
 
+	// reuse err
+	err = nil
+
 	for {
-		n, err := WriteData(loginClient, c)
+		_, n, err := WriteData(loginClient, c)
 		log.Println("Send", n, err)
 		if err == io.EOF {
 			break
 		}
 
-		n, err = WriteData(c, loginClient)
+		_, n, err = WriteData(c, loginClient)
 		log.Println("Recv", n, err)
 		if err == io.EOF {
 			break
