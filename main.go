@@ -1,11 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"io"
 	"log"
 	"net"
 	"yulgang/model"
 )
+
+const BUFFERSIZE = 2048
+
+func WriteData(writer io.Writer, reader io.Reader) (n int, err error) {
+	data := make([]byte, BUFFERSIZE)
+	n, err = reader.Read(data)
+	data = data[:n]
+	writer.Write(data)
+	return
+}
 
 func handler(config model.Config, c *net.TCPConn) {
 	defer c.Close()
@@ -17,46 +28,51 @@ func handler(config model.Config, c *net.TCPConn) {
 	if err != nil {
 		log.Print(err)
 	}
+	defer loginClient.Close()
 
 	for {
-		data := make([]byte, 2048)
-		n, err := c.Read(data)
-		log.Println("send", n, err)
-		data = data[:n]
-		loginClient.Write(data)
+		n, err := WriteData(loginClient, c)
+		log.Println("Send", n, err)
 		if err == io.EOF {
 			break
 		}
 
-		data = make([]byte, 2048)
-		n, err = loginClient.Read(data)
-		log.Println("receive", n, err)
-		data = data[:n]
-		c.Write(data)
+		n, err = WriteData(c, loginClient)
+		log.Println("Recv", n, err)
 		if err == io.EOF {
 			break
 		}
 	}
 }
 
-func main() {
-	serverConfig := model.Config{}
-	serverConfig = serverConfig.Read("config.json")
-
+func ServerListener(config model.Config) {
 	serverNetConfig := &net.TCPAddr{
-		IP:   net.ParseIP(serverConfig.Server.IP),
-		Port: serverConfig.Server.Port,
+		IP:   net.ParseIP(config.Server.IP),
+		Port: config.Server.Port,
 	}
 	server, err := net.ListenTCP("tcp", serverNetConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("server listen on port", config.Server.Port)
+
 	for {
 		conn, err := server.AcceptTCP()
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Println("client connected on", conn.RemoteAddr().String())
 
-		go handler(serverConfig, conn)
+		go handler(config, conn)
 	}
+}
+
+func main() {
+	serverConfig := model.Config{}
+	serverConfig = serverConfig.Read("config.json")
+	if !serverConfig.Log {
+		emptyBuffer := bufio.NewWriter(nil)
+		log.SetOutput(emptyBuffer)
+	}
+	ServerListener(serverConfig)
 }
