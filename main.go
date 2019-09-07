@@ -21,6 +21,32 @@ func WriteLogFile(data []byte, prefix string) error {
 	return err
 }
 
+func GetData8064(data []byte, newIPAddr string, newPort int) ([]byte, model.IpConfig, string) {
+	// get ip & port & username
+	ipSize := binary.LittleEndian.Uint16(data)
+	gameConfig := model.IpConfig{
+		IP:   string(data[2 : ipSize+2]),
+		Port: int(binary.LittleEndian.Uint16(data[ipSize+2:])),
+	}
+	data = data[ipSize+2+2:]
+	userSize := binary.LittleEndian.Uint16(data)
+	user := string(data[2 : userSize+2])
+
+	// prepare new data
+	newIPAddrLenBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(newIPAddrLenBytes, uint16(len(newIPAddr)))
+	newPortBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(newPortBytes, uint16(newPort))
+
+	// create new packet data
+	newData := append(newIPAddrLenBytes, []byte(newIPAddr)...)
+	newData = append(newData, newPortBytes...)
+	newData = append(newData, data...)
+
+	log.Println("created:", gameConfig, "to", ServerConfig.Game, user)
+	return newData, gameConfig, user
+}
+
 func InjectData(n int, data []byte) (int, []byte) {
 	if n <= 0 {
 		return n, data
@@ -28,31 +54,9 @@ func InjectData(n int, data []byte) (int, []byte) {
 	code := binary.LittleEndian.Uint16(data[:2])
 	switch code {
 	case 0x8064:
-		data = data[4:n]
-		// get ip
-		ipSize := binary.LittleEndian.Uint16(data)
-		ipAddr := string(data[2 : ipSize+2])
-		port := binary.LittleEndian.Uint16(data[ipSize+2:])
-		data = data[ipSize+2+2:]
-		userSize := binary.LittleEndian.Uint16(data)
-		user := string(data[2 : userSize+2])
-		log.Println(ipAddr, port, userSize, user, data)
-
-		// new data
-		newIPAddr := ServerConfig.Game.IP
-		newPort := ServerConfig.Game.Port
-
-		newIPAddrLenBytes := make([]byte, 2)
-		binary.LittleEndian.PutUint16(newIPAddrLenBytes, uint16(len(newIPAddr)))
-		newPortBytes := make([]byte, 2)
-		binary.LittleEndian.PutUint16(newPortBytes, uint16(newPort))
-
-		// create new packet data
-		newData := append(newIPAddrLenBytes, []byte(newIPAddr)...)
-		newData = append(newData, newPortBytes...)
-		newData = append(newData, data...)
-		newData = BuilderNewPacket(code, newData)
-		return len(newData), newData
+		data, _, _ = GetData8064(data[4:n], ServerConfig.Game.IP, ServerConfig.Game.Port)
+		data = BuilderNewPacket(code, data)
+		return len(data), data
 	}
 	return n, data[:n]
 }
@@ -73,11 +77,11 @@ func WriteData(writer io.Writer, reader io.Reader) (data []byte, n int, err erro
 	return
 }
 
-func handler(config model.Config, c *net.TCPConn) {
+func handler(c *net.TCPConn) {
 	defer c.Close()
 	loginNetConfig := &net.TCPAddr{
-		IP:   net.ParseIP(config.Login.IP),
-		Port: config.Login.Port,
+		IP:   net.ParseIP(ServerConfig.Login.IP),
+		Port: ServerConfig.Login.Port,
 	}
 	loginClient, err := net.DialTCP("tcp", nil, loginNetConfig)
 	if err != nil {
@@ -103,16 +107,16 @@ func handler(config model.Config, c *net.TCPConn) {
 	}
 }
 
-func ServerListener(config model.Config) {
+func ServerListener() {
 	serverNetConfig := &net.TCPAddr{
-		IP:   net.ParseIP(config.Server.IP),
-		Port: config.Server.Port,
+		IP:   net.ParseIP(ServerConfig.Server.IP),
+		Port: ServerConfig.Server.Port,
 	}
 	server, err := net.ListenTCP("tcp", serverNetConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("server listen on port", config.Server.Port)
+	log.Println("server listen on port", ServerConfig.Server.Port)
 
 	for {
 		conn, err := server.AcceptTCP()
@@ -121,15 +125,15 @@ func ServerListener(config model.Config) {
 		}
 		log.Println("client connected on", conn.RemoteAddr().String())
 
-		go handler(config, conn)
+		go handler(conn)
 	}
 }
 
 func main() {
-	ServerConfig = ServerConfig.Read("config.json")
+	ServerConfig.Read("config.json")
 	if !ServerConfig.Log {
 		emptyBuffer := bufio.NewWriter(nil)
 		log.SetOutput(emptyBuffer)
 	}
-	ServerListener(ServerConfig)
+	ServerListener()
 }

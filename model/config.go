@@ -17,7 +17,7 @@ type Config struct {
 	Log    bool     `json:"log"`
 }
 
-func (Config) Read(filename string) (config Config) {
+func (config *Config) Read(filename string) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		panic(err)
