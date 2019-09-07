@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -22,14 +24,22 @@ func InjectData(n int, data []byte) (int, []byte) {
 	if n <= 0 {
 		return n, data
 	}
-
-	switch {
-	case (data[0] == 0x64 && data[1] == 0x80):
-		game = true
-		b := []byte{}
-		return len(b), b
+	code := binary.BigEndian.Uint16(data[:2])
+	switch code {
+	case 0x6480:
+		fmt.Println(data)
 	}
 	return n, data[:n]
+}
+
+func BuilderNewPacket(code uint16, data []byte) (newPacket []byte) {
+	newPacket = make([]byte, 2)
+	binary.BigEndian.PutUint16(newPacket, code)
+	lenBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(lenBytes, uint16(len(data)))
+	newPacket = append(newPacket, lenBytes...)
+	newPacket = append(newPacket, data...)
+	return
 }
 
 func WriteData(writer io.Writer, reader io.Reader) (data []byte, n int, err error) {
