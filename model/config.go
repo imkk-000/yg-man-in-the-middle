@@ -13,6 +13,7 @@ type IpConfig struct {
 type Config struct {
 	Server IpConfig `json:"server"`
 	Login  IpConfig `json:"login"`
+	Game   IpConfig `json:"game"`
 	Log    bool     `json:"log"`
 }
 
