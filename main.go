@@ -33,11 +33,9 @@ func InjectData(n int, data []byte) (int, []byte) {
 }
 
 func BuilderNewPacket(code uint16, data []byte) (newPacket []byte) {
-	newPacket = make([]byte, 2)
+	newPacket = make([]byte, 2+2)
 	binary.BigEndian.PutUint16(newPacket, code)
-	lenBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(lenBytes, uint16(len(data)))
-	newPacket = append(newPacket, lenBytes...)
+	binary.BigEndian.PutUint16(newPacket[2:], uint16(len(data)))
 	newPacket = append(newPacket, data...)
 	return
 }
